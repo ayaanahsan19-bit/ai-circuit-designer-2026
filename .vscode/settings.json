@@ -1,0 +1,8 @@
+{
+    "python.analysis.extraPaths": [
+        "./src", 
+        "./visualization",
+        "."
+    ],
+    "python.analysis.typeCheckingMode": "basic"
+}
