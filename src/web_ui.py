@@ -1,151 +1,167 @@
-# FILE: src/web_ui.py
-"""
-Advanced Web UI for AI Circuit Designer with 3D Visualization
-Run with: streamlit run src/web_ui.py
-"""
 import streamlit as st
-import torch
-import pandas as pd
-import matplotlib.pyplot as plt
-from models.simple_circuit_ai import SimpleCircuitAI
-from visualization.circuit_3d_engine import Circuit3DVisualizer
-import plotly.graph_objects as go
+import streamlit.components.v1 as components
+import json
+import sys
+import os
 
-# Page setup
-st.set_page_config(page_title="AI Circuit Designer 2026", layout="wide")
-st.title("🔌 AI Circuit Designer 2026")
-st.markdown("Design optimized circuits using AI with 3D visualization")
+# --- ROBUST IMPORT ---
+try:
+    from PCB_Generator import PCBGenerator
+except ImportError:
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from PCB_Generator import PCBGenerator
 
-# Load AI model
-@st.cache_resource
-def load_model():
-    return SimpleCircuitAI()
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="AI Circuit Designer 2026", layout="wide", initial_sidebar_state="expanded")
 
-ai = load_model()
-
-# Sidebar for circuit parameters
-st.sidebar.header("⚙️ Circuit Parameters")
-
-voltage = st.sidebar.slider("Voltage (V)", 1.0, 24.0, 5.0, 0.1)
-resistance = st.sidebar.slider("Resistance (Ω)", 10.0, 10000.0, 1000.0, 10.0)
-capacitance = st.sidebar.slider("Capacitance (F)", 1e-9, 1e-3, 1e-4, 1e-9)
-frequency = st.sidebar.slider("Frequency (Hz)", 1.0, 1e6, 1000.0, 100.0)
-current = st.sidebar.slider("Current (A)", 0.001, 1.0, 0.01, 0.001)
-
-# Design button
-if st.sidebar.button("🚀 Design Circuit", type="primary"):
-    with st.spinner("AI designing circuit..."):
-        # Prepare input
-        inputs = torch.tensor([[voltage, resistance, capacitance, frequency, current]], dtype=torch.float32)
-        
-        # Get AI design
-        with torch.no_grad():
-            design = ai(inputs)
-        
-        # Display results in tabs
-        tab1, tab2, tab3 = st.tabs(["📊 Component Values", "🧊 3D Circuit", "📈 Performance"])
-        
-        with tab1:
-            # Component values bar chart
-            fig, ax = plt.subplots(figsize=(10, 5))
-            values = design[0].detach().numpy()
-            components = ['Resistor', 'Capacitor', 'Inductor', 'Gain', 'Q-Factor'][:len(values)]
-            colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7']
-            
-            bars = ax.bar(components, values, color=colors[:len(values)])
-            ax.set_ylabel("Normalized Value")
-            ax.set_title("AI Circuit Component Values")
-            ax.grid(True, alpha=0.3, axis='y')
-            
-            # Add value labels on bars
-            for bar, value in zip(bars, values):
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                       f'{value:.4f}', ha='center', va='bottom', fontsize=10)
-            
-            st.pyplot(fig)
-        
-        with tab2:
-            # 3D CIRCUIT VISUALIZATION
-            st.subheader("🧊 3D Circuit Visualization")
-            
-            # Create 3D visualizer
-            viz_3d = Circuit3DVisualizer()
-            
-            # Convert AI output to 3D circuit
-            design_np = design[0].detach().numpy()
-            fig_3d = viz_3d.create_circuit_from_ai(design_np)
-            
-            # Display 3D plot
-            st.plotly_chart(fig_3d, use_container_width=True)
-            
-            # 3D Controls
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.info("🖱️ Click & drag to rotate")
-            with col2:
-                st.info("🔍 Scroll to zoom")
-            with col3:
-                st.info("📐 Hover for values")
-            
-            # Circuit info
-            with st.expander("📋 Circuit Details"):
-                st.write(f"**Input Parameters:**")
-                st.write(f"- Voltage: {voltage} V")
-                st.write(f"- Resistance: {resistance} Ω")
-                st.write(f"- Capacitance: {capacitance} F")
-                st.write(f"- Frequency: {frequency} Hz")
-                st.write(f"- Current: {current} A")
-        
-        with tab3:
-            # Performance metrics
-            st.subheader("📈 Circuit Performance")
-            
-            # Performance gauges
-            perf_metrics = {
-                "Efficiency": design[0][0].item() * 100,
-                "Stability": design[0][1].item() * 100,
-                "Cost Score": design[0][2].item() * 100
-            }
-            
-            for metric, value in perf_metrics.items():
-                st.progress(value/100, text=f"{metric}: {value:.1f}%")
-            
-            # Performance comparison chart
-            fig2, ax2 = plt.subplots(figsize=(10, 4))
-            ax2.bar(list(perf_metrics.keys()), list(perf_metrics.values()), color=['green', 'blue', 'orange'])
-            ax2.set_ylabel("Score (%)")
-            ax2.set_ylim(0, 100)
-            ax2.grid(True, alpha=0.3)
-            st.pyplot(fig2)
-            
-            # Recommendations
-            st.subheader("💡 AI Recommendations")
-            if design[0][0].item() > 0.7:
-                st.success("✅ High efficiency design - suitable for power applications")
-            if design[0][1].item() > 0.6:
-                st.info("📡 Stable circuit - good for high-frequency applications")
-            if design[0][2].item() < 0.4:
-                st.warning("💰 Cost-effective design")
-        
-        st.success("✅ Circuit design complete! Switch between tabs above.")
-
-# Main area
-st.header("📊 Example Circuits")
-if st.button("Generate Sample Designs"):
-    sample_circuits = torch.randn(5, 5) * 0.5 + 1.0
-    designs = ai(sample_circuits)
+# --- FUTURISTIC CSS ---
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; color: #c9d1d9; font-family: 'Segoe UI', sans-serif; }
+    h1 { color: #58a6ff; font-family: 'Courier New', monospace; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
     
-    df = pd.DataFrame({
-        'Circuit': [f'Circuit {i+1}' for i in range(5)],
-        'Resistor Value': designs[:, 0].detach().numpy(),
-        'Capacitor Value': designs[:, 1].detach().numpy(),
-        'Layout Score': designs[:, 2].detach().numpy()
-    })
-    st.dataframe(df.style.highlight_max(axis=0))
+    /* Buttons */
+    .stButton>button {
+        background: linear-gradient(90deg, #238636 0%, #2ea043 100%);
+        color: white; border: 1px solid #238636; font-weight: bold; border-radius: 6px; padding: 10px 24px;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #2ea043 0%, #3fb950 100%);
+        box-shadow: 0 0 15px rgba(63, 185, 80, 0.4);
+    }
     
-    st.line_chart(df.set_index('Circuit'))
+    /* Inputs */
+    .stTextArea textarea { background-color: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 6px; }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] { background-color: #161b22; border-radius: 6px; gap: 4px; }
+    .stTabs [data-baseweb="tab"] { color: #8b949e !important; border-radius: 6px 6px 0 0; padding: 10px 20px; }
+    .stTabs [aria-selected="true"] { background-color: #21262d !important; color: #58a6ff !important; border-bottom: 2px solid #58a6ff !important; }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] { background-color: #161b22; border-right: 1px solid #30363d; }
+</style>
+""", unsafe_allow_html=True)
 
-# Footer
-st.markdown("---")
-st.caption("AI Circuit Designer 2026 | Built with PyTorch, Streamlit & 3D Visualization")
+# --- SIDEBAR INFO ---
+with st.sidebar:
+    st.title("⚡ Circuit AI")
+    st.caption("2026 Industrial Edition")
+    st.markdown("---")
+    st.markdown("### 🛠️ How to use")
+    st.markdown("1. 📝 Enter a prompt")
+    st.markdown("2. ⚡ Click **Generate**")
+    st.markdown("3. 📐 View 2D, 3D & Calculations")
+    st.markdown("---")
+    st.info("⚡ **Engine:** SchemDraw + Plotly")
+
+# --- MAIN PAGE ---
+st.title("⚡ AI CIRCUIT DESIGNER")
+st.write("Describe the circuit. The AI will design the Schematic, 3D PCB, and perform Engineering Calculations.")
+
+# Default prompt
+default_prompt = "Design a Buck converter with 24V input and 5V output"
+user_prompt = st.text_area("Enter Circuit Prompt:", default_prompt, height=100)
+
+if st.button("⚡ GENERATE CIRCUIT"):
+    progress_bar = st.progress(0, text="Initializing Core...")
+    
+    with st.spinner("AI Architect is working..."):
+        try:
+            # 1. INITIALIZATION
+            generator = PCBGenerator(project_name="AI_Design")
+            progress_bar.progress(20, text="Parsing Prompt...")
+            
+            # 2. PARSING & CALCULATIONS
+            generator.parse_ai_output(user_prompt)
+            progress_bar.progress(40, text="Generating Netlist...")
+            
+            # 3. NETLIST
+            netlist_path = generator.generate_netlist()
+            progress_bar.progress(60, text="Drawing Schematic...")
+            
+            # 4. SCHEMATIC
+            svg_code = generator.generate_schematic_svg()
+            progress_bar.progress(80, text="Rendering 3D PCB...")
+            
+            # 5. 3D PCB
+            fig_3d = generator.generate_3d_pcb() 
+            progress_bar.progress(100, text="Complete!")
+            
+            # SUCCESS MESSAGE
+            st.success(f"✅ Successfully Generated: {generator.project_name}")
+            
+            # --- DISPLAY TABS ---
+            tab1, tab2, tab3, tab4 = st.tabs(["📐 Schematic (2D)", "📦 PCB 3D View", "🧮 Calculations", "💾 Source Code"])
+
+            with tab1:
+                st.subheader("Circuit Diagram (IEEE Standard)")
+                if svg_code and "Error" not in svg_code:
+                    components.html(svg_code, height=450, scrolling=False)
+                else:
+                    st.error("Schematic generation failed.")
+                    st.code(svg_code, language='xml')
+
+            with tab2:
+                st.subheader("Interactive 3D View")
+                st.write("👆 Click and drag to rotate. Scroll to zoom.")
+                st.plotly_chart(fig_3d, use_container_width=True)
+                
+            with tab3:
+                st.subheader("Engineering Parameters")
+                # Create a nice display for calculations
+                cols = st.columns(3)
+                items = list(generator.calculations.items())
+                
+                for idx, (key, value) in enumerate(items):
+                    col_idx = idx % 3
+                    with cols[col_idx]:
+                        st.metric(label=key, value=value)
+                
+                st.markdown("---")
+                st.info("These values are calculated using standard power electronics equations based on your prompt.")
+                
+            with tab4:
+                st.subheader("Download Source Files")
+                col1, col2, col3 = st.columns(3)
+                
+                # 1. SVG Download
+                with col1:
+                    st.download_button(
+                        label="📄 Download SVG",
+                        data=svg_code,
+                        file_name=f"{generator.project_name}.svg",
+                        mime="image/svg+xml"
+                    )
+                
+                # 2. Netlist Download
+                with col2:
+                    try:
+                        with open(netlist_path, "r", encoding='utf-8') as f:
+                            netlist_data = f.read()
+                        st.download_button(
+                            label="🔌 Download Netlist",
+                            data=netlist_data,
+                            file_name=f"{generator.project_name}.net",
+                            mime="text/plain"
+                        )
+                    except Exception:
+                        st.warning("Netlist file error.")
+                
+                # 3. JSON Download
+                with col3:
+                    json_data = json.dumps(generator.components, indent=4)
+                    st.download_button(
+                        label="📋 Download JSON",
+                        data=json_data,
+                        file_name=f"{generator.project_name}.json",
+                        mime="application/json"
+                    )
+                
+                st.markdown("---")
+                st.subheader("Component Graph (JSON)")
+                st.code(json_data, language='json')
+                
+        except Exception as e:
+            st.error(f"⚠️ Critical System Error: {e}")
+            st.exception(e)
