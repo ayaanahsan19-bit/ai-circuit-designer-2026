@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import json
 import sys
 import os
+import plotly.graph_objects as go
 
 # --- ROBUST IMPORT ---
 try:
@@ -74,6 +75,7 @@ if st.button("⚡ GENERATE CIRCUIT"):
             
             # 2. PARSING & CALCULATIONS
             generator.parse_ai_output(user_prompt)
+            generator.run_calculations()
             progress_bar.progress(40, text="Generating Netlist...")
             
             # 3. NETLIST
@@ -85,14 +87,16 @@ if st.button("⚡ GENERATE CIRCUIT"):
             progress_bar.progress(80, text="Rendering 3D PCB...")
             
             # 5. 3D PCB
-            fig_3d = generator.generate_3d_pcb() 
+            fig_3d = generator.generate_3d_pcb()
             progress_bar.progress(100, text="Complete!")
             
             # SUCCESS MESSAGE
             st.success(f"✅ Successfully Generated: {generator.project_name}")
             
             # --- DISPLAY TABS ---
-            tab1, tab2, tab3, tab4 = st.tabs(["📐 Schematic (2D)", "📦 PCB 3D View", "🧮 Calculations", "💾 Source Code"])
+            tab1, tab2, tab3, tab4 = st.tabs(
+                ["📐 Schematic (2D)", "📦 PCB 3D View", "🧮 Calculations & Waveforms", "💾 Source Code"]
+            )
 
             with tab1:
                 st.subheader("Circuit Diagram (IEEE Standard)")
@@ -112,14 +116,30 @@ if st.button("⚡ GENERATE CIRCUIT"):
                 # Create a nice display for calculations
                 cols = st.columns(3)
                 items = list(generator.calculations.items())
-                
+
                 for idx, (key, value) in enumerate(items):
+                    if key == "Status":
+                        continue
                     col_idx = idx % 3
                     with cols[col_idx]:
                         st.metric(label=key, value=value)
-                
+
                 st.markdown("---")
-                st.info("These values are calculated using standard power electronics equations based on your prompt.")
+                st.subheader("Waveforms (SPICE)")
+                wave_data = generator.simulate_waveforms()
+                if wave_data:
+                    fig_wave = go.Figure()
+                    for name, (t_vals, y_vals) in wave_data.items():
+                        fig_wave.add_trace(go.Scatter(x=t_vals, y=y_vals, mode="lines", name=name))
+                    fig_wave.update_layout(
+                        xaxis_title="Time",
+                        yaxis_title="Amplitude",
+                        template="plotly_dark",
+                        height=400,
+                    )
+                    st.plotly_chart(fig_wave, use_container_width=True)
+                else:
+                    st.info("Waveform simulation is not available on this system or not yet configured.")
                 
             with tab4:
                 st.subheader("Download Source Files")

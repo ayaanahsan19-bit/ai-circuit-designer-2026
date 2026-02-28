@@ -1,7 +1,8 @@
 * Netlist: Buck_Converter
-.net VIN Q1
-.net Q1 L1
-.net L1 C1
-.net C1 RL
-.net Q1 D1
+V1 VIN 0 24.0
+S1 VIN SW SW_CTRL 0 SWMOD
+L1 SW VOUT 100u
+C1 VOUT 0 100u
+RL VOUT 0 10
+.tran 0.1u 5e-05
 .end
