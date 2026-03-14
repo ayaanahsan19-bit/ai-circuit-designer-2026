@@ -1,8 +1,0 @@
-* Netlist: Buck_Converter
-V1 VIN 0 24.0
-S1 VIN SW SW_CTRL 0 SWMOD
-L1 SW VOUT 100u
-C1 VOUT 0 100u
-RL VOUT 0 10
-.tran 0.1u 0.0001
-.end

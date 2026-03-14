@@ -1,8 +1,14 @@
 import json
 import os
 import math
+from pathlib import Path
 import numpy as np
 import plotly.graph_objects as go
+
+# Absolute path to the exports directory, resolved relative to this file.
+# This ensures writes succeed regardless of the working directory when
+# Streamlit (or any other runner) launches the app.
+_EXPORTS_DIR = Path(__file__).resolve().parent.parent / "exports"
 
 # Safe imports for SchemDraw
 try:
@@ -659,8 +665,8 @@ class PCBGenerator:
         Generate a simple SPICE-style netlist stub for the current design.
         This will be refined per-topology in later iterations.
         """
-        filepath = os.path.join("exports", filename)
-        os.makedirs("exports", exist_ok=True)
+        _EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = str(_EXPORTS_DIR / filename)
 
         topo = self.design_data.get("parameters", {}).get("topology", "")
 
@@ -733,151 +739,65 @@ class PCBGenerator:
 
     def generate_schematic_svg(self, filename="schematic.svg"):
         if not SCHEMDRAW_AVAILABLE: return "<svg>Missing SchemDraw</svg>"
-        filepath = os.path.join("exports", filename)
-        os.makedirs("exports", exist_ok=True)
+        _EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = str(_EXPORTS_DIR / filename)
+        
+        try:
+            with schemdraw.Drawing(file=filepath, show=False) as d:
+                d.config(unit=3)
+                
+                # --- BUCK CONVERTER (Manual Perfect Layout) ---
+                if "buck" in self.prompt_text.lower():
+                    V_in = elm.SourceV().label("Vin 24V").right()
+                    elm.Line().right()
+                    Q1 = elm.NFet().label("Q1")
+                    sw_pt = d.here; elm.Dot()
+                    elm.Line().right()
+                    elm.Inductor2().right().label("L1")
+                    cap_pt = d.here; elm.Dot()
+                    elm.Line().right()
+                    elm.Resistor().down().label("Load")
+                    load_pt = d.here; elm.Dot()
+                    
+                    # Close the loop safely
+                    elm.Line().left().tox(V_in.start[0])
+                    elm.Ground()
+                    elm.Line().up().toy(V_in.start[1])
+                    
+                    # Capacitor Branch
+                    elm.Capacitor2().at(cap_pt).down().label("C1")
+                    elm.Line().down().toy(load_pt[1])
+                    elm.Line().left().tox(load_pt[0])
+                    
+                    # Diode Branch
+                    elm.Line().at(sw_pt).down()
+                    elm.Diode().down().label("D1")
+                    elm.Line().down().toy(load_pt[1])
+                    elm.Line().left().tox(load_pt[0])
 
-        # --- BUCK CONVERTER ---
-        if "buck" in self.prompt_text.lower() or "step-down" in self.prompt_text.lower():
-            try:
-                with schemdraw.Drawing(file=filepath, show=False) as d:
-                    d.config(unit=4.5, fontsize=12, inches_per_unit=0.6)
-
-                    # ── TOP RAIL: left to right ──────────────────────────────
-
-                    # Voltage source (left side, vertical)
-                    V1 = d.add(elm.SourceV().up().label('$V_{IN}$\n24 V', loc='left'))
-
-                    # Top-left corner line going right
-                    d.add(elm.Line().right(1.5))
-
-                    # Q1 MOSFET — use as a controlled switch on top rail
-                    d.add(elm.Switch().right().label('Q1  IRF540', loc='top'))
-
-                    # SW node dot
-                    sw_dot = d.add(elm.Dot())
-                    sw_here = d.here
-
-                    # Line from SW to inductor
-                    d.add(elm.Line().right(0.8))
-
-                    # L1 Inductor
-                    d.add(elm.Inductor2(loops=3).right().label('L1   100 \u00b5H', loc='top'))
-
-                    # Output node dot
-                    out_dot = d.add(elm.Dot())
-                    out_here = d.here
-
-                    # Short line then Vout label
-                    d.add(elm.Line().right(0.6))
-                    d.add(elm.Dot(open=True))
-                    d.add(elm.Label().label('$V_{OUT}$ = 5 V', loc='right'))
-
-                    # ── RIGHT SIDE: load resistor going down ─────────────────
-                    d.add(elm.Resistor().down().label('$R_{load}$\n2.5 \u03a9', loc='right'))
-                    bot_right = d.here
-                    d.add(elm.Dot())
-
-                    # ── C1: output capacitor, parallel with load ──────────────
-                    d.add(elm.Line().left(1.8).at(out_here))
-                    cap_top = d.here
-                    d.add(elm.Capacitor2().down().label('C1\n100 \u00b5F', loc='right'))
-                    cap_bot = d.here
-                    d.add(elm.Line().right(1.8))   # reconnect to bottom rail
-
-                    # ── D1: freewheeling diode, SW node straight down ─────────
-                    d.add(elm.Line().down(0.6).at(sw_here))
-                    d.add(elm.Diode().down().flip().label('D1  Schottky', loc='right'))
-                    d1_bot = d.here
-                    d.add(elm.Ground())
-
-                    # ── BOTTOM RAIL: right to left ────────────────────────────
-                    d.add(elm.Line().left().tox(V1.start).at(bot_right))
-
-                    # GND symbols
-                    d.add(elm.Ground().at(cap_bot))
-                    d.add(elm.Ground().at(bot_right))
-
-                    # Close source bottom
-                    d.add(elm.Ground().at(V1.start))
-
-                # ── READ AND POST-PROCESS SVG ─────────────────────────
-                if os.path.exists(filepath):
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        svg = f.read()
+                # --- GENERIC / LED (Safe Auto Layout) ---
                 else:
-                    return "<svg><text fill='red'>File not found</text></svg>"
-
-                import re
-
-                # 1. WHITE background
-                svg = re.sub(r'<rect[^>]*fill="[^"]*"[^>]*/>', '', svg)
-                svg = svg.replace('<svg ', '<svg style="background:white;" ', 1)
-
-                # 2. All lines/strokes BLACK
-                svg = re.sub(r'stroke="(?!none)[^"]*"', 'stroke="#111111"', svg)
-                svg = re.sub(r'stroke:\s*#[0-9a-fA-F]+', 'stroke:#111111', svg)
-                svg = re.sub(r'stroke:\s*rgb\([^)]+\)', 'stroke:#111111', svg)
-
-                # 3. All text BLACK — matplotlib renders text as <use> inside <g id="text_N">
-                svg = re.sub(r'(<g\s+id="text_\d+")', r'\1 fill="#111111"', svg)
-
-                # 4. Component fill WHITE (not transparent)
-                svg = re.sub(r'fill="none"', 'fill="white"', svg)
-
-                # 5. Larger minimum font size
-                svg = re.sub(
-                    r'font-size="(\d+(?:\.\d+)?)"',
-                    lambda m: f'font-size="{max(13, int(float(m.group(1))))}"',
-                    svg)
-
-                # 6. Clean font
-                if 'font-family' not in svg[:200]:
-                    svg = svg.replace('<svg ', '<svg font-family="Arial, sans-serif" ', 1)
-
-                # 7. Thicker lines — minimum 1.8px
-                svg = re.sub(
-                    r'stroke-width:\s*(\d+(?:\.\d+)?)',
-                    lambda m: f'stroke-width: {max(1.8, float(m.group(1)))}', svg)
-
-                # 8. Remove any leftover dark background rects
-                svg = re.sub(r'<rect[^>]*fill="#0[^"]*"[^>]*/>', '', svg)
-                svg = re.sub(r'<rect[^>]*fill="rgb\(0[^"]*"[^>]*/>', '', svg)
-
-                # 9. Remove floating blue dots from previous iteration
-                svg = re.sub(r'<circle[^>]*fill="#58a6ff"[^>]*/>', '', svg)
-
-                return svg
-
-            except Exception as e:
-                return f"<svg width='900' height='500'><rect width='900' height='500' fill='white'/><text x='20' y='40' fill='red' font-size='16'>Schematic Error: {e}</text></svg>"
-
-        # --- GENERIC / LED (Safe Auto Layout) ---
-        else:
-            try:
-                with schemdraw.Drawing(file=filepath, show=False) as d:
-                    d.config(unit=4.5, fontsize=12, inches_per_unit=0.6)
+                    # Draw components in a line for safety
                     for i, comp in enumerate(self.components):
-                        if i > 0: d.add(elm.Line().right())
-
+                        if i > 0: elm.Line().right()
+                        
                         ctype = comp['type']
                         val = comp.get('value', comp['id'])
+                        
+                        if ctype == "Source": elm.SourceV().label(val)
+                        elif ctype == "Resistor": elm.Resistor().label(val)
+                        elif ctype == "Capacitor": elm.Capacitor2().label(val)
+                        elif ctype == "Inductor": elm.Inductor2().label(val)
+                        elif ctype == "MOSFET": elm.NFet().label(comp['id'])
+                        elif ctype == "Diode": elm.Diode().label(val) # FIX: Added Diode
+                        else: elm.Resistor().label(comp['id']) # FIX: Safe fallback (Box doesn't exist)
 
-                        if ctype == "Source": d.add(elm.SourceV().label(val))
-                        elif ctype == "Resistor": d.add(elm.Resistor().label(val))
-                        elif ctype == "Capacitor": d.add(elm.Capacitor2().label(val))
-                        elif ctype == "Inductor": d.add(elm.Inductor2().label(val))
-                        elif ctype == "MOSFET": d.add(elm.NFet().label(comp['id']))
-                        elif ctype == "Diode": d.add(elm.Diode().label(val))
-                        else: d.add(elm.Resistor().label(comp['id']))
-
-                if os.path.exists(filepath):
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        svg = f.read()
-                    svg = svg.replace('<svg ', '<svg style="background:white;" ', 1)
-                    return svg
-                return ""
-            except Exception as e:
-                return f"<svg width='900' height='500'><rect width='900' height='500' fill='white'/><text x='20' y='40' fill='red' font-size='16'>Schematic Error: {e}</text></svg>"
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f: return f.read()
+                    
+        except Exception as e:
+            return f"<svg width='100%' height='100%'><rect width='100%' height='100%' fill='#222'/><text x='10' y='20' fill='red'>Schematic Error: {e}</text></svg>"
+        return "<svg width='100%' height='100%'><rect width='100%' height='100%' fill='#222'/><text x='10' y='20' fill='red'>Schematic Error: SVG file was not created.</text></svg>"
 
     def render_pcb_3d(self, prompt_text=None, show=True):
         """
@@ -935,8 +855,5 @@ class PCBGenerator:
 
     # Backwards-compatible name expected by web_ui.py
     def generate_3d_pcb(self, prompt_text=None):
-        """Returns a self-contained Three.js HTML string for 3D PCB view."""
-        from visualization.circuit_3d_engine import ThreeJSPCBRenderer
-        return ThreeJSPCBRenderer.generate_html(
-            self.components, self.design_data, self.project_name
-        )
+        """Wrapper for older code paths – always returns a Plotly Figure."""
+        return self.render_pcb_3d(prompt_text=prompt_text, show=False)

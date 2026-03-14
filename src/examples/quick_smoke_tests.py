@@ -6,6 +6,14 @@ Run with:
 from the project root.
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Ensure the src/ directory is on the path so PCB_Generator can be found
+# whether the script is run as a module or directly.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from PCB_Generator import PCBGenerator
 
 
