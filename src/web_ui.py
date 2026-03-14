@@ -101,7 +101,9 @@ if st.button("⚡ GENERATE CIRCUIT"):
             with tab1:
                 st.subheader("Circuit Diagram (IEEE Standard)")
                 if svg_code and "Error" not in svg_code:
-                    components.html(svg_code, height=450, scrolling=False)
+                    st.markdown('<div style="display:flex; justify-content:center;">', unsafe_allow_html=True)
+                    components.html(svg_code, height=600, scrolling=False)
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.error("Schematic generation failed.")
                     st.code(svg_code, language='xml')
@@ -109,7 +111,7 @@ if st.button("⚡ GENERATE CIRCUIT"):
             with tab2:
                 st.subheader("Interactive 3D View")
                 st.write("👆 Click and drag to rotate. Scroll to zoom.")
-                st.plotly_chart(fig_3d, use_container_width=True)
+                components.html(fig_3d, height=650, scrolling=False)
                 
             with tab3:
                 st.subheader("Engineering Parameters")
