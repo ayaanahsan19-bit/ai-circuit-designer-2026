@@ -1,8 +1,14 @@
 import json
 import os
 import math
+from pathlib import Path
 import numpy as np
 import plotly.graph_objects as go
+
+# Absolute path to the exports directory, resolved relative to this file.
+# This ensures writes succeed regardless of the working directory when
+# Streamlit (or any other runner) launches the app.
+_EXPORTS_DIR = Path(__file__).resolve().parent.parent / "exports"
 
 # Safe imports for SchemDraw
 try:
@@ -659,8 +665,8 @@ class PCBGenerator:
         Generate a simple SPICE-style netlist stub for the current design.
         This will be refined per-topology in later iterations.
         """
-        filepath = os.path.join("exports", filename)
-        os.makedirs("exports", exist_ok=True)
+        _EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = str(_EXPORTS_DIR / filename)
 
         topo = self.design_data.get("parameters", {}).get("topology", "")
 
@@ -733,8 +739,8 @@ class PCBGenerator:
 
     def generate_schematic_svg(self, filename="schematic.svg"):
         if not SCHEMDRAW_AVAILABLE: return "<svg>Missing SchemDraw</svg>"
-        filepath = os.path.join("exports", filename)
-        os.makedirs("exports", exist_ok=True)
+        _EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = str(_EXPORTS_DIR / filename)
         
         try:
             with schemdraw.Drawing(file=filepath, show=False) as d:
@@ -791,7 +797,7 @@ class PCBGenerator:
                     
         except Exception as e:
             return f"<svg width='100%' height='100%'><rect width='100%' height='100%' fill='#222'/><text x='10' y='20' fill='red'>Schematic Error: {e}</text></svg>"
-        return ""
+        return "<svg width='100%' height='100%'><rect width='100%' height='100%' fill='#222'/><text x='10' y='20' fill='red'>Schematic Error: SVG file was not created.</text></svg>"
 
     def render_pcb_3d(self, prompt_text=None, show=True):
         """

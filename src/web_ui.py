@@ -149,7 +149,7 @@ if st.button("⚡ GENERATE CIRCUIT"):
                 with col1:
                     st.download_button(
                         label="📄 Download SVG",
-                        data=svg_code,
+                        data=svg_code or "<svg/>",
                         file_name=f"{generator.project_name}.svg",
                         mime="image/svg+xml"
                     )
